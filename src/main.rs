@@ -17,7 +17,7 @@ fn main() {
                 let response_200 = "HTTP/1.1 200 OK\r\n\r\n";
                 let response_404 = "HTTP/1.1 404 Not Found\r\n\r\n";
                 let request_200_partial = "GET / HTTP/1.1\r\n";
-                let mut request: Vec<u8> = Vec::new();
+                let mut request: [u8; 1024] = [0; 1024];
 
                 // Read the request data
                 let _size = stream.read(&mut request).unwrap();
