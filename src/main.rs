@@ -30,6 +30,8 @@ fn main() {
                     let partial = request_string.strip_prefix(request_head).unwrap();
                     println!("Partial: {}", partial);
                     let (head, tail) = partial.split_once(" ").unwrap();
+                    println!("Head: {}", head);
+                    println!("Tail: {}", tail);
                     if request_tail.eq_ignore_ascii_case(tail) {
                         let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", head.len(), head);
                         stream.write(response.as_bytes()).unwrap();
