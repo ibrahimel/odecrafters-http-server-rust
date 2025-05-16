@@ -103,7 +103,7 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
         }
     } else {
         println!("Headers split: {:?}", headers_split);
-        let _map = headers_split.iter().map(|header| {
+        for header in headers_split {
             println!("Processing header: {}", header);
             let parts: Vec<&str> = header.split(": ").collect();
             if parts.len() != 2 {
@@ -136,7 +136,7 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
                     println!("Unknown header found !: {}", parts[0]);
                 }
             }
-        });
+        }
     }
     // We have an invalid header
     if has_invalid_header {
