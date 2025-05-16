@@ -30,7 +30,7 @@ struct HTTPRequest {
 
 fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
     // Debug
-    println!("Request: {}", request);
+    //println!("Request: {}", request);
     // Split different elements
     let elements: Vec<&str> = request.split("\r\n\r\n").collect();
 
