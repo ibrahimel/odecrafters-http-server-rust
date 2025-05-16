@@ -17,7 +17,7 @@ fn main() {
                 //let response_404 = "HTTP/1.1 404 Not Found\r\n\r\n";
                 let mut request = [0u8; 1024];
                 //let mut request_string: String = String::new();
-                let request_head = "GET /echo/";
+                let request_head = "GET /";
                 //let request_tail = "HTTP/1.1\r\nHost: localhost:4221\r\n\r\n";
 
                 // Read the request data
