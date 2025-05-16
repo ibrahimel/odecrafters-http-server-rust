@@ -80,10 +80,10 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
 
     // Raw headers
     let headers_raw = parts_elements[1];
-    print!("Headers raw: {}", headers_raw);
 
     // Split each header
     let headers_split: Vec<&str> = headers_raw.split("\r\n").collect();
+    println!("Headers split: {:?}", headers_split);
 
     // No match, then check for host
     if headers_split.len() < 2 {
