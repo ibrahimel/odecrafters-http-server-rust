@@ -153,10 +153,10 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
         return None;
     }
     // Body sent without Content-Length header
-    if !body.is_empty() && !has_content_length {
-        println!("Body sent without Content-Length header !");
-        return None;
-    }
+    //if !body.is_empty() && !has_content_length {
+    //    println!("Body sent without Content-Length header !");
+    //     return None;
+    //}
 
     Some(HTTPRequest {
         verb,
