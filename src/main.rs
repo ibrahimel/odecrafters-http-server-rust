@@ -162,7 +162,7 @@ fn main() {
             Ok(mut stream) => {
                 // Read the request data
                 let mut request: [u8; 1024] = [0; 1024];
-                let _size = match stream.read(&mut request) {
+                let size = match stream.read(&mut request) {
                     Ok(size) => size,
                     Err(e) => {
                         println!("error reading stream: {}", e);
@@ -170,13 +170,14 @@ fn main() {
                     }
                 };
                 // convert to string
-                let request_string = match String::from_utf8(request.to_vec()) {
-                    Ok(request_string) => request_string,
-                    Err(e) => {
-                        println!("error converting request to string: {}", e);
-                        continue;
-                    }
-                };
+                let request_string =
+                    match String::from_utf8(request.chunks(size).next().unwrap().to_vec()) {
+                        Ok(request_string) => request_string,
+                        Err(e) => {
+                            println!("error converting request to string: {}", e);
+                            continue;
+                        }
+                    };
                 // Get HTTP Request struct
                 let request: HTTPRequest = match extract_parts_and_body(request_string.as_str()) {
                     Some(request) => request,
