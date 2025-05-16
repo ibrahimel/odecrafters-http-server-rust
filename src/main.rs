@@ -22,6 +22,7 @@ fn main() {
                 // Read the request data
                 let _size = stream.read(&mut request).unwrap();
                 let request_string = String::from_utf8(request.clone()).unwrap();
+                print!("Request String: {}", request_string);
 
                 // Compare the requests data with the partial expected for a 200, otherwise respond with a 404
                 if request_string.starts_with(request_head) {
