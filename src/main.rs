@@ -62,7 +62,7 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
 
     // Handle the case where we have a GET request with a body
     if verb.eq("GET") && !body.is_empty() {
-        println!("Invalid request format. GET request with body");
+        println!("Invalid request format. GET request with body: {}", body);
         return None;
     }
 
