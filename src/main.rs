@@ -86,7 +86,7 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
 
     // No match, then check for host
     if headers_split.len() < 2 {
-        let headers_single: Vec<&str> = headers_raw.split(":").collect();
+        let headers_single: Vec<&str> = headers_raw.split(": ").collect();
         // No host, not normal
         if headers_single.len() != 2 {
             println!("No host header found !");
