@@ -16,6 +16,7 @@ const PROTOCOL: &str = "HTTP/1.1";
 const RESPONSE_404: &str = "HTTP/1.1 404 Not Found\r\n\r\n";
 const RESPONSE_200: &str = "HTTP/1.1 200 OK\r\n\r\n";
 
+#[derive(Debug)]
 struct HTTPRequest {
     verb: String,
     path: String,
@@ -28,6 +29,8 @@ struct HTTPRequest {
 }
 
 fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
+    // Debug
+    println!("Request: {}", request);
     // Split different elements
     let elements: Vec<&str> = request.split("\r\n\r\n").collect();
 
