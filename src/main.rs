@@ -47,7 +47,7 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
         return None;
     }
     // handle incorrect request
-    if parts_elements[0].split(" ").count() != 3 {
+    if parts_elements[0].split(" ").count() != 2 {
         println!("Invalid request format. Incorrect request");
         return None;
     }
