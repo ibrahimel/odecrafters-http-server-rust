@@ -15,7 +15,7 @@ fn main() {
 
                 // Different resonses and requets
                 let response_404 = "HTTP/1.1 404 Not Found\r\n\r\n";
-                let mut request: Vec<u8> = Vec::new();
+                let mut request: Vec<u8> = Vec::with_capacity(1024);
                 let request_head = "GET /echo/";
                 let request_tail = "HTTP/1.1\r\nHost: localhost:4221\r\n\r\n";
 
