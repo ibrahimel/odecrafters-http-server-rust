@@ -17,7 +17,7 @@ fn main() {
                 //let response_404 = "HTTP/1.1 404 Not Found\r\n\r\n";
                 let mut request = [0u8; 1024];
                 //let mut request_string: String = String::new();
-                let request_head = "GET /";
+                let request_head = "GET /echo/";
                 //let request_tail = "HTTP/1.1\r\nHost: localhost:4221\r\n\r\n";
 
                 // Read the request data
@@ -25,14 +25,21 @@ fn main() {
                 let request_string = String::from_utf8(request.to_vec()).unwrap();
                 println!("Request String: {}", request_string);
 
-                let partial = request_string.strip_prefix(request_head).unwrap();
-                let (head, _tail) = partial.split_once(" ").unwrap();
-                let response = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
-                    head.len(),
-                    head
-                );
-                stream.write(response.as_bytes()).unwrap();
+                match request_string.strip_prefix(request_head) {
+                    Some(partial) => {
+                        let (head, _tail) = partial.split_once(" ").unwrap();
+                        let response = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                            head.len(),
+                            head
+                        );
+                        stream.write(response.as_bytes()).unwrap();
+                    }
+                    None => {
+                        let response = "HTTP/1.1 404 Not Found\r\n\r\n";
+                        stream.write(response.as_bytes()).unwrap();
+                    }
+                }
             }
             Err(e) => {
                 println!("error: {}", e);
