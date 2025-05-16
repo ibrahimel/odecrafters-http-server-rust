@@ -20,7 +20,7 @@ fn main() {
                 let request_tail = "HTTP/1.1\r\nHost: localhost:4221\r\n\r\n";
 
                 // Read the request data
-                let _size = stream.read_to_end(&mut request).unwrap();
+                let _size = stream.read(&mut request).unwrap();
                 let request_string = String::from_utf8(request.clone()).unwrap();
 
                 // Compare the requests data with the partial expected for a 200, otherwise respond with a 404
