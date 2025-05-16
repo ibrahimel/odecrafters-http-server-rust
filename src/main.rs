@@ -103,6 +103,7 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
         }
     } else {
         let _map = headers_split.iter().map(|header| {
+            println!("Processing header: {}", header);
             let parts: Vec<&str> = header.split(": ").collect();
             if parts.len() != 2 {
                 has_invalid_header = true;
