@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
 #[allow(unused_imports)]
+#[allow(dead_code)]
 use std::net::TcpListener;
 
 const VERBS: [&str; 6] = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"];
@@ -32,6 +33,7 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
 
     // We expect at least the parts and body (even if empty)
     if elements.len() < 2 {
+        println!("Invalid request format. Couldn't find parts and body");
         return None;
     }
     // parts and body
@@ -41,15 +43,18 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
     // remove the HTTP version
     let parts_elements: Vec<&str> = parts.split(" HTTP/1.1\r\n").collect();
     if parts_elements.len() < 2 {
+        println!("Invalid request format. Couldn't find HTTP version");
         return None;
     }
     // handle incorrect request
     if parts_elements[0].split(" ").count() != 3 {
+        println!("Invalid request format. Incorrect request");
         return None;
     }
     // Exctract verb and path
     let verb_and_path: Vec<&str> = parts_elements[0].split(" ").collect();
     if verb_and_path.len() != 2 {
+        println!("Invalid request format. Couldn't find verb and path");
         return None;
     }
     let verb = verb_and_path[0].to_string();
@@ -57,6 +62,7 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
 
     // Handle the case where we have a GET request with a body
     if verb.eq("GET") && !body.is_empty() {
+        println!("Invalid request format. GET request with body");
         return None;
     }
 
@@ -78,9 +84,14 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
         let headers_single: Vec<&str> = headers_raw.split(":").collect();
         // No host, not normal
         if headers_single.len() != 2 {
+            println!("No host header found !");
             return None;
         } else {
             if !headers_single[0].eq("Host") {
+                println!(
+                    "Invalid header format. Expected 'Host', found '{}'",
+                    headers_single[0]
+                );
                 return None;
             }
             host = headers_single[1].to_string();
@@ -109,18 +120,22 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
     });
     // We have an invalid header
     if has_invalid_header {
+        println!("Invalid header format found among headers !");
         return None;
     }
     // Host was not set
     if host.is_empty() {
+        println!("Host header not found among headers !");
         return None;
     }
     // Unknown verb
     if !VERBS.contains(&verb.as_str()) {
+        println!("Unknown verb found used in request !");
         return None;
     }
     // Body sent without Content-Length header
     if !body.is_empty() && !has_content_length {
+        println!("Body sent without Content-Length header !");
         return None;
     }
 
