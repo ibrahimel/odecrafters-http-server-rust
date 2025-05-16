@@ -29,7 +29,7 @@ fn main() {
                 if request_string.starts_with(request_head) {
                     let partial = request_string.strip_prefix(request_head).unwrap();
                     let (head, tail) = partial.split_once(" ").unwrap();
-                    if request_tail.eq_ignore_ascii_case(tail) {
+                    if request_tail.eq(tail) {
                         let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", head.len(), head);
                         stream.write(response.as_bytes()).unwrap();
                     } else {
