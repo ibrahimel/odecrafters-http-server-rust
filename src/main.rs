@@ -1,8 +1,7 @@
 //use regex::Regex;
-use std::io::{Read, Write};
-#[allow(unused_imports)]
-#[allow(dead_code)]
-use std::net::TcpListener;
+use std::io;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
 
 const VERBS: [&str; 6] = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"];
 const HOST: &str = "localhost:4221";
@@ -57,12 +56,6 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
     }
     let verb = verb_and_path[0].to_string();
     let path = verb_and_path[1].to_string();
-
-    // Handle the case where we have a GET request with a body
-    // if verb.eq("GET") && !body.is_empty() {
-    //     println!("Invalid request format. GET request with body: {}", body);
-    //     return None;
-    // }
 
     // Now headers
     let mut host: String = String::new();
@@ -148,97 +141,93 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
     })
 }
 
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
+async fn handle_connection(mut stream: TcpStream) -> io::Result<()> {
+    // Read the request data
+    let mut request = [0; 1024];
+    let size = stream.read(&mut request).await?;
 
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut stream) => {
-                // Read the request data
-                let mut request: [u8; 1024] = [0; 1024];
-                let size = match stream.read(&mut request) {
-                    Ok(size) => size,
-                    Err(e) => {
-                        println!("error reading stream: {}", e);
-                        continue;
-                    }
+    // convert to string
+    let request_string = match String::from_utf8(request[..size].to_vec()) {
+        Ok(request_string) => request_string,
+        Err(e) => {
+            println!("error converting request to string: {}", e);
+            return Ok(());
+        }
+    };
+
+    // Get HTTP Request struct
+    let request: HTTPRequest = match extract_parts_and_body(request_string.as_str()) {
+        Some(request) => request,
+        None => {
+            println!("error extracting parts and body from request");
+            return Ok(());
+        }
+    };
+
+    // Handle the request based on the path and verb
+    match request.verb.as_str() {
+        "GET" => match request.path.as_str() {
+            "/" => {
+                stream.write_all(RESPONSE_200.as_bytes()).await?;
+            }
+            "/user-agent" => {
+                // Extract user agent
+                let user_agent: String = match request.user_agent {
+                    Some(user_agent) => user_agent,
+                    None => "Unknown".to_string(),
                 };
-                // convert to string
-                let request_string =
-                    match String::from_utf8(request.chunks(size).next().unwrap().to_vec()) {
-                        Ok(request_string) => request_string,
-                        Err(e) => {
-                            println!("error converting request to string: {}", e);
-                            continue;
-                        }
-                    };
-                // Get HTTP Request struct
-                let request: HTTPRequest = match extract_parts_and_body(request_string.as_str()) {
-                    Some(request) => request,
-                    None => {
-                        println!("error extracting parts and body from request");
-                        continue;
-                    }
-                };
-                // Current exercise: / is 200 OK and /user-agent is 200 OK with the user agent
-                match request.verb.as_str() {
-                    "GET" => match request.path.as_str() {
-                        "/" => match stream.write(RESPONSE_200.as_bytes()) {
-                            Ok(_) => {
-                                continue;
-                            }
-                            Err(e) => {
-                                println!("error writing response: {}", e);
-                                continue;
-                            }
-                        },
-                        "/user-agent" => {
-                            // Extract user agent
-                            let user_agent: String = match request.user_agent {
-                                Some(user_agent) => user_agent,
-                                None => "Unknown".to_string(),
-                            };
-                            // Respond 200 OK with user_agent
-                            match stream.write(format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", user_agent.len(), user_agent).as_bytes()) {
-                                Ok(_) => {
-                                    continue;
-                                }
-                                Err(e) => {
-                                    println!("error writing response: {}", e);
-                                    continue;
-                                }
-                            }
-                        }
-                        other => {
-                            if other.starts_with("/echo/") {
-                                let message = other.split_at(6).1;
-                                match stream.write(format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", message.len(), message).as_bytes()) {
-                                    Ok(_) => {
-                                        continue;
-                                    }
-                                    Err(e) => {
-                                        println!("error writing response: {}", e);
-                                        continue;
-                                    }
-                                }
-                            }
-                            // Response 404 Not Found
-                            match stream.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()) {
-                                Ok(_) => {
-                                    continue;
-                                }
-                                Err(e) => {
-                                    println!("error writing response: {}", e);
-                                    continue;
-                                }
-                            }
-                        }
-                    },
-                    _ => continue,
+                // Respond 200 OK with user_agent
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                    user_agent.len(),
+                    user_agent
+                );
+                stream.write_all(response.as_bytes()).await?;
+            }
+            other => {
+                if other.starts_with("/echo/") {
+                    let message = other.split_at(6).1;
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                        message.len(),
+                        message
+                    );
+                    stream.write_all(response.as_bytes()).await?;
+                } else {
+                    // Response 404 Not Found
+                    stream
+                        .write_all("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
+                        .await?;
                 }
             }
+        },
+        _ => {}
+    }
+
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> io::Result<()> {
+    // Bind to the address using Tokio's TcpListener
+    let listener = TcpListener::bind("127.0.0.1:4221").await?;
+    println!("Server listening on 127.0.0.1:4221");
+
+    // Accept connections and process them concurrently
+    loop {
+        match listener.accept().await {
+            Ok((stream, addr)) => {
+                println!("New connection from: {}", addr);
+
+                // Spawn a new task for each connection
+                tokio::spawn(async move {
+                    if let Err(e) = handle_connection(stream).await {
+                        println!("Error handling connection: {}", e);
+                    }
+                });
+            }
             Err(e) => {
-                println!("error in incoming stream: {}", e);
+                println!("Error accepting connection: {}", e);
             }
         }
     }
