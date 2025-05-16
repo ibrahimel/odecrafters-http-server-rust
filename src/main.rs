@@ -36,8 +36,13 @@ fn main() {
                         stream.write(response.as_bytes()).unwrap();
                     }
                     None => {
-                        let response = "HTTP/1.1 200 OK\r\n\r\n";
-                        stream.write(response.as_bytes()).unwrap();
+                        if request_string.starts_with("GET / ") {
+                            let response = "HTTP/1.1 200 OK\r\n\r\n";
+                            stream.write(response.as_bytes()).unwrap();
+                        } else {
+                            let response = "HTTP/1.1 404 Not Found\r\n\r\n";
+                            stream.write(response.as_bytes()).unwrap();
+                        }
                     }
                 }
             }
