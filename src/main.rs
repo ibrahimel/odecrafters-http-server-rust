@@ -143,10 +143,10 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
         return None;
     }
     // Host was not set
-    if host.is_empty() {
-        println!("Host header not found among headers !");
-        return None;
-    }
+    //if host.is_empty() {
+    //    println!("Host header not found among headers !");
+    //    return None;
+    //}
     // Unknown verb
     if !VERBS.contains(&verb.as_str()) {
         println!("Unknown verb found used in request !");
