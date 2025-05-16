@@ -61,10 +61,10 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
     let path = verb_and_path[1].to_string();
 
     // Handle the case where we have a GET request with a body
-    if verb.eq("GET") && !body.is_empty() {
-        println!("Invalid request format. GET request with body: {}", body);
-        return None;
-    }
+    // if verb.eq("GET") && !body.is_empty() {
+    //     println!("Invalid request format. GET request with body: {}", body);
+    //     return None;
+    // }
 
     // Now headers
     let mut host: String = String::new();
