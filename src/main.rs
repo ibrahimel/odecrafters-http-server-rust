@@ -29,14 +29,11 @@ struct HTTPRequest {
 }
 
 fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
-    // Debug
-    //println!("Request: {}", request);
     // Split different elements
     let elements: Vec<&str> = request.split("\r\n\r\n").collect();
 
     // We expect at least the parts and body (even if empty)
     if elements.len() < 2 {
-        println!("Invalid request format. Couldn't find parts and body");
         return None;
     }
     // parts and body
@@ -46,18 +43,15 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
     // remove the HTTP version
     let parts_elements: Vec<&str> = parts.split(" HTTP/1.1\r\n").collect();
     if parts_elements.len() < 2 {
-        println!("Invalid request format. Couldn't find HTTP version");
         return None;
     }
     // handle incorrect request
     if parts_elements[0].split(" ").count() != 2 {
-        println!("Invalid request format. Incorrect request");
         return None;
     }
     // Exctract verb and path
     let verb_and_path: Vec<&str> = parts_elements[0].split(" ").collect();
     if verb_and_path.len() != 2 {
-        println!("Invalid request format. Couldn't find verb and path");
         return None;
     }
     let verb = verb_and_path[0].to_string();
@@ -89,22 +83,15 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
         let headers_single: Vec<&str> = headers_raw.split(": ").collect();
         // No host, not normal
         if headers_single.len() != 2 {
-            println!("No host header found !");
             return None;
         } else {
             if !headers_single[0].eq("Host") {
-                println!(
-                    "Invalid header format. Expected 'Host', found '{}'",
-                    headers_single[0]
-                );
                 return None;
             }
             host = headers_single[1].to_string();
         }
     } else {
-        println!("Headers split: {:?}", headers_split);
         for header in headers_split {
-            println!("Processing header: {}", header);
             let parts: Vec<&str> = header.split(": ").collect();
             if parts.len() != 2 {
                 has_invalid_header = true;
@@ -112,29 +99,22 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
 
             match parts[0] {
                 "Host" => {
-                    println!("Host header found !: {}", parts[1]);
                     host = parts[1].to_string();
                 }
                 "User-Agent" => {
-                    println!("User-Agent header found !: {}", parts[1]);
                     user_agent = Some(parts[1].to_string());
                 }
                 "Content-Length" => {
-                    println!("Content-Length header found !: {}", parts[1]);
                     has_content_length = true;
                     content_length = Some(parts[1].parse().unwrap_or(0));
                 }
                 "Content-Type" => {
-                    println!("Content-Type header found !: {}", parts[1]);
                     content_type = Some(parts[1].to_string());
                 }
                 "Accept" => {
-                    println!("Accept header found !: {}", parts[1]);
                     accept = Some(parts[1].to_string());
                 }
-                _ => {
-                    println!("Unknown header found !: {}", parts[0]);
-                }
+                _ => {}
             }
         }
     }
@@ -144,20 +124,20 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
         return None;
     }
     // Host was not set
-    //if host.is_empty() {
-    //    println!("Host header not found among headers !");
-    //    return None;
-    //}
+    if host.is_empty() {
+        println!("Host header not found among headers !");
+        return None;
+    }
     // Unknown verb
     if !VERBS.contains(&verb.as_str()) {
         println!("Unknown verb found used in request !");
         return None;
     }
     // Body sent without Content-Length header
-    //if !body.is_empty() && !has_content_length {
-    //    println!("Body sent without Content-Length header !");
-    //     return None;
-    //}
+    if !body.is_empty() && !has_content_length {
+        println!("Body sent without Content-Length header !");
+        return None;
+    }
 
     Some(HTTPRequest {
         verb,
