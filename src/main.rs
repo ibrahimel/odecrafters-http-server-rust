@@ -14,17 +14,25 @@ fn main() {
                 println!("accepted new connection");
 
                 // Different resonses and requets
-                let response_200 = "HTTP/1.1 200 OK\r\n\r\n";
                 let response_404 = "HTTP/1.1 404 Not Found\r\n\r\n";
-                let request_200_partial = "GET / HTTP/1.1\r\n";
-                let mut request: [u8; 1024] = [0; 1024];
+                let mut request: Vec<u8> = Vec::new();
+                let request_head = "GET /echo/";
+                let request_tail = "HTTP/1.1\r\nHost: localhost:4221\r\n\r\n";
 
                 // Read the request data
-                let _size = stream.read(&mut request).unwrap();
+                let _size = stream.read_to_end(&mut request).unwrap();
+                let request_string = String::from_utf8(request.clone()).unwrap();
 
                 // Compare the requests data with the partial expected for a 200, otherwise respond with a 404
-                if request.starts_with(&request_200_partial.as_bytes()) {
-                    stream.write(response_200.as_bytes()).unwrap();
+                if request_string.starts_with(request_head) {
+                    let partial = request_string.strip_prefix(request_head).unwrap();
+                    let (head, tail) = partial.split_once(" ").unwrap();
+                    if request_tail.eq_ignore_ascii_case(tail) {
+                        let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", head.len(), head);
+                        stream.write(response.as_bytes()).unwrap();
+                    } else {
+                        stream.write(response_404.as_bytes()).unwrap();
+                    }
                 } else {
                     stream.write(response_404.as_bytes()).unwrap();
                 }
