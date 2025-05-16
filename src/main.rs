@@ -75,6 +75,8 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
     let mut content_length: Option<u32> = None;
     let mut content_type: Option<String> = None;
     let mut accept: Option<String> = None;
+    let mut has_invalid_header: bool = false;
+    let mut has_content_length = false;
 
     // Raw headers
     let headers_raw = parts_elements[1];
@@ -99,28 +101,41 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
             }
             host = headers_single[1].to_string();
         }
-    }
-    let mut has_invalid_header: bool = false;
-    let mut has_content_length = false;
-
-    let _map = headers_split.iter().map(|header| {
-        let parts: Vec<&str> = header.split(": ").collect();
-        if parts.len() != 2 {
-            has_invalid_header = true;
-        }
-
-        match parts[0] {
-            "Host" => host = parts[1].to_string(),
-            "User-Agent" => user_agent = Some(parts[1].to_string()),
-            "Content-Length" => {
-                has_content_length = true;
-                content_length = Some(parts[1].parse().unwrap_or(0));
+    } else {
+        let _map = headers_split.iter().map(|header| {
+            let parts: Vec<&str> = header.split(": ").collect();
+            if parts.len() != 2 {
+                has_invalid_header = true;
             }
-            "Content-Type" => content_type = Some(parts[1].to_string()),
-            "Accept" => accept = Some(parts[1].to_string()),
-            _ => {}
-        }
-    });
+
+            match parts[0] {
+                "Host" => {
+                    println!("Host header found !: {}", parts[1]);
+                    host = parts[1].to_string();
+                }
+                "User-Agent" => {
+                    println!("User-Agent header found !: {}", parts[1]);
+                    user_agent = Some(parts[1].to_string());
+                }
+                "Content-Length" => {
+                    println!("Content-Length header found !: {}", parts[1]);
+                    has_content_length = true;
+                    content_length = Some(parts[1].parse().unwrap_or(0));
+                }
+                "Content-Type" => {
+                    println!("Content-Type header found !: {}", parts[1]);
+                    content_type = Some(parts[1].to_string());
+                }
+                "Accept" => {
+                    println!("Accept header found !: {}", parts[1]);
+                    accept = Some(parts[1].to_string());
+                }
+                _ => {
+                    println!("Unknown header found !: {}", parts[0]);
+                }
+            }
+        });
+    }
     // We have an invalid header
     if has_invalid_header {
         println!("Invalid header format found among headers !");
