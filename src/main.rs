@@ -26,7 +26,9 @@ fn main() {
 
                 // Compare the requests data with the partial expected for a 200, otherwise respond with a 404
                 if request_string.starts_with(request_head) {
+                    println!("Head is OK");
                     let partial = request_string.strip_prefix(request_head).unwrap();
+                    println!("Partial: {}", partial);
                     let (head, tail) = partial.split_once(" ").unwrap();
                     if request_tail.eq_ignore_ascii_case(tail) {
                         let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", head.len(), head);
