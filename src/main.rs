@@ -83,7 +83,6 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
 
     // Split each header
     let headers_split: Vec<&str> = headers_raw.split("\r\n").collect();
-    println!("Headers split: {:?}", headers_split);
 
     // No match, then check for host
     if headers_split.len() < 2 {
@@ -103,6 +102,7 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
             host = headers_single[1].to_string();
         }
     } else {
+        println!("Headers split: {:?}", headers_split);
         let _map = headers_split.iter().map(|header| {
             println!("Processing header: {}", header);
             let parts: Vec<&str> = header.split(": ").collect();
