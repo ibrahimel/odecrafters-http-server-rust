@@ -1,5 +1,7 @@
 //use regex::Regex;
-use std::io;
+use clap::Parser;
+use std::sync::Arc;
+use std::{fs, io};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
@@ -15,6 +17,12 @@ const HEADERS: [&str; 5] = [
 const PROTOCOL: &str = "HTTP/1.1";
 const RESPONSE_404: &str = "HTTP/1.1 404 Not Found\r\n\r\n";
 const RESPONSE_200: &str = "HTTP/1.1 200 OK\r\n\r\n";
+
+#[derive(Parser, Debug)]
+struct Args {
+    #[arg(short, long, default_value = "public")]
+    directory: String,
+}
 
 #[derive(Debug)]
 struct HTTPRequest {
@@ -141,7 +149,7 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
     })
 }
 
-async fn handle_connection(mut stream: TcpStream) -> io::Result<()> {
+async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io::Result<()> {
     // Read the request data
     let mut request = [0; 1024];
     let size = stream.read(&mut request).await?;
@@ -193,11 +201,24 @@ async fn handle_connection(mut stream: TcpStream) -> io::Result<()> {
                         message
                     );
                     stream.write_all(response.as_bytes()).await?;
+                } else if other.starts_with("/files/") {
+                    let file = other.split_at(7).1;
+                    match fs::read(format!("{}/{}", serve_dir, file)) {
+                        Ok(data) => {
+                            let response = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n",
+                                data.len()
+                            );
+                            stream.write_all(response.as_bytes()).await?;
+                            stream.write_all(&data).await?;
+                        }
+                        Err(_) => {
+                            stream.write_all(RESPONSE_404.as_bytes()).await?;
+                        }
+                    }
                 } else {
                     // Response 404 Not Found
-                    stream
-                        .write_all("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
-                        .await?;
+                    stream.write_all(RESPONSE_404.as_bytes()).await?;
                 }
             }
         },
@@ -209,6 +230,10 @@ async fn handle_connection(mut stream: TcpStream) -> io::Result<()> {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    // Parse command-line arguments
+    let args = Args::parse();
+    let serve_dir = Arc::new(args.directory);
+
     // Bind to the address using Tokio's TcpListener
     let listener = TcpListener::bind("127.0.0.1:4221").await?;
     println!("Server listening on 127.0.0.1:4221");
@@ -218,10 +243,11 @@ async fn main() -> io::Result<()> {
         match listener.accept().await {
             Ok((stream, addr)) => {
                 println!("New connection from: {}", addr);
+                let dir_clone = Arc::clone(&serve_dir);
 
                 // Spawn a new task for each connection
                 tokio::spawn(async move {
-                    if let Err(e) = handle_connection(stream).await {
+                    if let Err(e) = handle_connection(stream, dir_clone).await {
                         println!("Error handling connection: {}", e);
                     }
                 });
