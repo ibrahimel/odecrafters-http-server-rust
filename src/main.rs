@@ -1,3 +1,4 @@
+//use regex::Regex;
 use std::io::{Read, Write};
 #[allow(unused_imports)]
 #[allow(dead_code)]
@@ -120,25 +121,18 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
     }
     // We have an invalid header
     if has_invalid_header {
-        println!("Invalid header format found among headers !");
         return None;
     }
     // Host was not set
     if host.is_empty() {
-        println!("Host header not found among headers !");
         return None;
     }
     // Unknown verb
     if !VERBS.contains(&verb.as_str()) {
-        println!("Unknown verb found used in request !");
         return None;
     }
     // Body sent without Content-Length header
     if !body.is_empty() && !has_content_length {
-        println!(
-            "Body sent without Content-Length header !, body: {:?}",
-            body
-        );
         return None;
     }
 
@@ -215,7 +209,19 @@ fn main() {
                                 }
                             }
                         }
-                        _ => {
+                        other => {
+                            if other.starts_with("/echo/") {
+                                let message = other.split_at(6).1;
+                                match stream.write(format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", message.len(), message).as_bytes()) {
+                                    Ok(_) => {
+                                        continue;
+                                    }
+                                    Err(e) => {
+                                        println!("error writing response: {}", e);
+                                        continue;
+                                    }
+                                }
+                            }
                             // Response 404 Not Found
                             match stream.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()) {
                                 Ok(_) => {
