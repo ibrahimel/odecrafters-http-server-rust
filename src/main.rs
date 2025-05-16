@@ -23,7 +23,7 @@ fn main() {
                 // Read the request data
                 let _size = stream.read(&mut request).unwrap();
                 let request_string = String::from_utf8(request.to_vec()).unwrap();
-                //println!("Request String: {}", request_string);
+                println!("Request String: {}", request_string);
 
                 let partial = request_string.strip_prefix(request_head).unwrap();
                 let (head, _tail) = partial.split_once(" ").unwrap();
