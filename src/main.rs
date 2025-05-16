@@ -33,9 +33,11 @@ fn main() {
                         let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", head.len(), head);
                         stream.write(response.as_bytes()).unwrap();
                     } else {
+                        println!("False tail");
                         stream.write(response_404.as_bytes()).unwrap();
                     }
                 } else {
+                    println!("False head");
                     stream.write(response_404.as_bytes()).unwrap();
                 }
             }
