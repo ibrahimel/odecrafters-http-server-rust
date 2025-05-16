@@ -15,13 +15,13 @@ fn main() {
 
                 // Different resonses and requets
                 let response_404 = "HTTP/1.1 404 Not Found\r\n\r\n";
-                let mut request: Vec<u8> = Vec::with_capacity(1024);
+                let mut request: [u8; 1024] = [0; 1024];
                 let request_head = "GET /echo/";
                 let request_tail = "HTTP/1.1\r\nHost: localhost:4221\r\n\r\n";
 
                 // Read the request data
                 let _size = stream.read(&mut request).unwrap();
-                let request_string = String::from_utf8(request.clone()).unwrap();
+                let request_string = String::from_utf8(request.to_vec()).unwrap();
                 println!("Request String: {}", request_string);
 
                 // Compare the requests data with the partial expected for a 200, otherwise respond with a 404
