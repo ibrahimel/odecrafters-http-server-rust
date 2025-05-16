@@ -33,6 +33,7 @@ fn main() {
                     println!("Head: {}", head);
                     println!("Tail: {}", tail);
                     if request_tail.eq_ignore_ascii_case(tail) {
+                        println!("Tail is OK");
                         let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", head.len(), head);
                         stream.write(response.as_bytes()).unwrap();
                     } else {
