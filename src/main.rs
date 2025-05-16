@@ -23,7 +23,7 @@ fn main() {
                 let _size = stream.read(&mut request).unwrap();
 
                 // Compare the requests data with the partial expected for a 200, otherwise respond with a 404
-                if request.starts_with(request_200_partial.as_bytes()) {
+                if request.starts_with(&request_200_partial.as_bytes()) {
                     stream.write(response_200.as_bytes()).unwrap();
                 } else {
                     stream.write(response_404.as_bytes()).unwrap();
