@@ -48,7 +48,10 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
         .position(|window| window == crlf_pattern)
     {
         Some(index) => index + 3,
-        None => return None,
+        None => {
+            println!("No CRLF found");
+            return None;
+        }
     };
 
     let body: Option<Vec<u8>>;
@@ -58,7 +61,10 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
             println!("Parts: {:?}", parts_str);
             parts_str
         }
-        Err(_) => return None,
+        Err(_) => {
+            println!("Invalid parts");
+            return None;
+        }
     };
 
     if body_raw.is_empty() {
