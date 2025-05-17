@@ -248,6 +248,7 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
                 if conn == "close" {
                     close = true;
                     close_header = "Connection: close\r\n";
+                    tracing::info!("Close header: {}", conn);
                 }
             }
             None => {}
