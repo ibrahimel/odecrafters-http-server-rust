@@ -38,6 +38,7 @@ struct HTTPRequest {
     content_type: Option<String>,
     content_length: Option<u32>,
     accept: Option<String>,
+    accept_encoding: Option<String>,
     body: Option<Vec<u8>>,
 }
 
@@ -106,6 +107,7 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
     let mut content_length: Option<u32> = None;
     let mut content_type: Option<String> = None;
     let mut accept: Option<String> = None;
+    let mut accept_encoding: Option<String> = None;
 
     // Raw headers
     let headers_raw = parts_elements[1];
@@ -147,6 +149,9 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
                 }
                 "Accept" => {
                     accept = Some(parts[1].to_string());
+                }
+                "Accept-Encoding" => {
+                    accept_encoding = Some(parts[1].to_string());
                 }
                 _ => {}
             }
@@ -203,6 +208,7 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
         content_type,
         content_length,
         accept,
+        accept_encoding,
         body,
     };
 
@@ -248,12 +254,34 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
             other => {
                 if other.starts_with("/echo/") {
                     let message = other.split_at(6).1;
-                    let response = format!(
-                        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
-                        message.len(),
-                        message
-                    );
-                    stream.write_all(response.as_bytes()).await?;
+                    match request.accept_encoding {
+                        Some(encoding) => match encoding.as_str() {
+                            "gzip" => {
+                                let response = format!(
+                                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nContent-Encoding: gzip\r\n\r\n{}",
+                                    message.len(),
+                                    message
+                                );
+                                stream.write_all(response.as_bytes()).await?;
+                            }
+                            _ => {
+                                let response = format!(
+                                        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                                        message.len(),
+                                        message
+                                    );
+                                stream.write_all(response.as_bytes()).await?;
+                            }
+                        },
+                        None => {
+                            let response = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                                message.len(),
+                                message
+                            );
+                            stream.write_all(response.as_bytes()).await?;
+                        }
+                    }
                 } else if other.starts_with("/files/") {
                     let file = other.split_at(7).1;
                     match fs::read(format!("{}/{}", serve_dir, file)) {
