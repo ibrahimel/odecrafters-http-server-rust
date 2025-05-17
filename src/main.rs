@@ -255,24 +255,35 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
                 if other.starts_with("/echo/") {
                     let message = other.split_at(6).1;
                     match request.accept_encoding {
-                        Some(encoding) => match encoding.as_str() {
-                            "gzip" => {
-                                let response = format!(
+                        Some(encoding_header) => {
+                            let mut encodings: Vec<&str> = Vec::new();
+                            let encodings_vec: Vec<&str> =
+                                encoding_header.as_str().split(", ").collect();
+                            if encodings_vec.len() == 1 && encodings_vec[0].len() == 0 {
+                                encodings.push(encoding_header.as_str());
+                            } else {
+                                encodings.extend(encodings_vec);
+                            }
+                            for encoding in encodings {
+                                match encoding {
+                                    "gzip" => {
+                                        let response = format!(
                                     "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nContent-Encoding: gzip\r\n\r\n{}",
                                     message.len(),
                                     message
                                 );
-                                stream.write_all(response.as_bytes()).await?;
+                                        stream.write_all(response.as_bytes()).await?;
+                                    }
+                                    _ => {}
+                                }
                             }
-                            _ => {
-                                let response = format!(
-                                        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
-                                        message.len(),
-                                        message
-                                    );
-                                stream.write_all(response.as_bytes()).await?;
-                            }
-                        },
+                            let response = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                                message.len(),
+                                message
+                            );
+                            stream.write_all(response.as_bytes()).await?;
+                        }
                         None => {
                             let response = format!(
                                 "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
