@@ -28,7 +28,7 @@ struct Args {
     directory: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct HTTPRequest {
     verb: String,
     path: String,
@@ -59,8 +59,10 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
         request.len()
     );
     let body: Option<Vec<u8>>;
-    let body_raw: Vec<u8> = request.drain(..crlf_index).collect();
-    let parts = match String::from_utf8(request.drain(crlf_index..crlf_index + 3).collect()) {
+    let parts_raw: Vec<u8> = request.drain(..crlf_index - 3).collect();
+    let _crlf_raw: Vec<u8> = request.drain(..4).collect();
+    let body_raw = request;
+    let parts = match String::from_utf8(parts_raw) {
         Ok(parts_str) => {
             println!("Parts: {:?}", parts_str);
             parts_str
@@ -74,8 +76,8 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
     if body_raw.is_empty() {
         body = None;
     } else {
-        body = Some(body_raw);
-        println!("Body: {:?}", body);
+        body = Some(body_raw.clone());
+        println!("Body: {:?}", String::from_utf8_lossy(&body_raw));
     }
 
     // // Split different elements
@@ -166,17 +168,24 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
     if !VERBS.contains(&verb.as_str()) {
         return None;
     }
+    println!("We are at the body and length checks");
 
     // Checks on body and content length
     match content_length {
         Some(length) => match body.clone() {
             Some(body_value) => {
                 if body_value.len() != length as usize {
+                    println!(
+                        "Body length: {} does not match Content-Length header: {}",
+                        body_value.len(),
+                        length
+                    );
                     return None;
                 }
             }
             None => {
                 if length != 0 {
+                    println!("No body found but found content length: {}", length);
                     return None;
                 }
             }
@@ -184,6 +193,10 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
         None => match body.clone() {
             Some(body_value) => {
                 if body_value.len() != 0 {
+                    println!(
+                        "Body found of length {} but no Content-Length header",
+                        body_value.len()
+                    );
                     return None;
                 }
             }
@@ -191,7 +204,7 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
         },
     }
 
-    Some(HTTPRequest {
+    let req = HTTPRequest {
         verb,
         path,
         host,
@@ -200,7 +213,13 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
         content_length,
         accept,
         body,
-    })
+    };
+    println!(
+        "Request parsed successfully, returning HTTPRequest struct: {:?}",
+        req.clone()
+    );
+
+    Some(req)
 }
 
 async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io::Result<()> {
@@ -279,17 +298,24 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
         "POST" => {
             if request.path.starts_with("/files/") {
                 let filename = request.path.split_at(7).1;
+                let path = format!("{}{}", serve_dir, filename);
+                println!("Saving file {}", path);
                 match request.body {
-                    Some(data) => match fs::write(format!("{}{}", serve_dir, filename), &data) {
-                        Ok(_) => {
-                            stream
-                                .write_all("HTTP/1.1 201 Created\r\n\r\n".as_bytes())
-                                .await?;
+                    Some(data) => {
+                        println!("We have data !");
+                        match fs::write(path, &data) {
+                            Ok(_) => {
+                                println!("File saved successfully");
+                                stream
+                                    .write_all("HTTP/1.1 201 Created\r\n\r\n".as_bytes())
+                                    .await?;
+                            }
+                            Err(e) => {
+                                println!("Failed to save file: {:?}", e);
+                                stream.write_all(RESPONSE_404.as_bytes()).await?;
+                            }
                         }
-                        Err(_) => {
-                            stream.write_all(RESPONSE_404.as_bytes()).await?;
-                        }
-                    },
+                    }
                     None => {
                         stream.write_all(RESPONSE_404.as_bytes()).await?;
                     }
@@ -299,7 +325,9 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
                 stream.write_all(RESPONSE_404.as_bytes()).await?;
             }
         }
-        _ => {}
+        _ => {
+            println!("Unknown request method");
+        }
     }
 
     Ok(())
