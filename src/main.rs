@@ -53,7 +53,11 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
             return None;
         }
     };
-
+    println!(
+        "CRLF found at: {} and size is {}",
+        crlf_index,
+        request.len()
+    );
     let body: Option<Vec<u8>>;
     let body_raw: Vec<u8> = request.drain(..crlf_index).collect();
     let parts = match String::from_utf8(request.drain(crlf_index..crlf_index + 3).collect()) {
