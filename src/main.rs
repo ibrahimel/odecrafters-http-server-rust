@@ -54,7 +54,10 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
     let body: Option<Vec<u8>>;
     let body_raw: Vec<u8> = request.drain(..crlf_index).collect();
     let parts = match String::from_utf8(request.drain(crlf_index..crlf_index + 3).collect()) {
-        Ok(parts_str) => parts_str,
+        Ok(parts_str) => {
+            println!("Parts: {:?}", parts_str);
+            parts_str
+        }
         Err(_) => return None,
     };
 
@@ -62,6 +65,7 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
         body = None;
     } else {
         body = Some(body_raw);
+        println!("Body: {:?}", body);
     }
 
     // // Split different elements
