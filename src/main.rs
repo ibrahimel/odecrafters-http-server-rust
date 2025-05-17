@@ -1,6 +1,9 @@
 #[allow(dead_code)]
 //use regex::Regex;
 use clap::Parser;
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use std::io::Write;
 use std::sync::Arc;
 use std::{fs, io};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -267,12 +270,16 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
                             for encoding in encodings {
                                 match encoding {
                                     "gzip" => {
+                                        let mut encoder =
+                                            GzEncoder::new(Vec::new(), Compression::default());
+                                        encoder.write_all(message.as_bytes())?;
+                                        let compressed_message = encoder.finish()?;
                                         let response = format!(
-                                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nContent-Encoding: gzip\r\n\r\n{}",
-                                    message.len(),
-                                    message
+                                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nContent-Encoding: gzip\r\n\r\n",
+                                    compressed_message.len()
                                 );
                                         stream.write_all(response.as_bytes()).await?;
+                                        stream.write_all(&compressed_message).await?;
                                     }
                                     _ => {}
                                 }
