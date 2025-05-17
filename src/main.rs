@@ -15,8 +15,12 @@ const HEADERS: [&str; 5] = [
     "Host",
 ];
 const PROTOCOL: &str = "HTTP/1.1";
+// Not found
 const RESPONSE_404: &str = "HTTP/1.1 404 Not Found\r\n\r\n";
+// All ok
 const RESPONSE_200: &str = "HTTP/1.1 200 OK\r\n\r\n";
+// bad request
+const RESPONSE_400: &str = "HTTP/1.1 400 Bad Request\r\n\r\n";
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -33,23 +37,46 @@ struct HTTPRequest {
     content_type: Option<String>,
     content_length: Option<u32>,
     accept: Option<String>,
-    body: String,
+    body: Option<Vec<u8>>,
 }
 
-fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
-    // Split different elements
-    let elements: Vec<&str> = request.split("\r\n\r\n").collect();
+fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
+    // Check if we found the CRLF in the request
+    let crlf_pattern = [13, 10, 13, 10];
+    let crlf_index = match request
+        .windows(crlf_pattern.len())
+        .position(|window| window == crlf_pattern)
+    {
+        Some(index) => index + 3,
+        None => return None,
+    };
 
-    // We expect at least the parts and body (even if empty)
-    if elements.len() < 2 {
-        return None;
+    let body: Option<Vec<u8>>;
+    let body_raw: Vec<u8> = request.drain(..crlf_index).collect();
+    let parts = match String::from_utf8(request.drain(crlf_index..crlf_index + 3).collect()) {
+        Ok(parts_str) => parts_str,
+        Err(_) => return None,
+    };
+
+    if body_raw.is_empty() {
+        body = None;
+    } else {
+        body = Some(body_raw);
     }
+
+    // // Split different elements
+    // let elements: Vec<&str> = request.split("\r\n\r\n").collect();
+
+    // // We expect at least the parts and body (even if empty)
+    // if elements.len() < 2 {
+    //     return None;
+    // }
     // parts and body
-    let parts = elements[0];
-    let body = elements[1].to_string();
+    // let parts = elements[0];
+    // let body = elements[1].to_string();
 
     // remove the HTTP version
-    let parts_elements: Vec<&str> = parts.split(" HTTP/1.1\r\n").collect();
+    let parts_elements: Vec<&str> = parts.as_str().split(" HTTP/1.1\r\n").collect();
     if parts_elements.len() < 2 {
         return None;
     }
@@ -71,8 +98,6 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
     let mut content_length: Option<u32> = None;
     let mut content_type: Option<String> = None;
     let mut accept: Option<String> = None;
-    let mut has_invalid_header: bool = false;
-    let mut has_content_length = false;
 
     // Raw headers
     let headers_raw = parts_elements[1];
@@ -96,7 +121,7 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
         for header in headers_split {
             let parts: Vec<&str> = header.split(": ").collect();
             if parts.len() != 2 {
-                has_invalid_header = true;
+                return None;
             }
 
             match parts[0] {
@@ -107,7 +132,6 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
                     user_agent = Some(parts[1].to_string());
                 }
                 "Content-Length" => {
-                    has_content_length = true;
                     content_length = Some(parts[1].parse().unwrap_or(0));
                 }
                 "Content-Type" => {
@@ -120,10 +144,6 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
             }
         }
     }
-    // We have an invalid header
-    if has_invalid_header {
-        return None;
-    }
     // Host was not set
     if host.is_empty() {
         return None;
@@ -132,9 +152,29 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
     if !VERBS.contains(&verb.as_str()) {
         return None;
     }
-    // Body sent without Content-Length header
-    if !body.is_empty() && !has_content_length {
-        return None;
+
+    // Checks on body and content length
+    match content_length {
+        Some(length) => match body.clone() {
+            Some(body_value) => {
+                if body_value.len() != length as usize {
+                    return None;
+                }
+            }
+            None => {
+                if length != 0 {
+                    return None;
+                }
+            }
+        },
+        None => match body.clone() {
+            Some(body_value) => {
+                if body_value.len() != 0 {
+                    return None;
+                }
+            }
+            None => {}
+        },
     }
 
     Some(HTTPRequest {
@@ -151,20 +191,20 @@ fn extract_parts_and_body(request: &str) -> Option<HTTPRequest> {
 
 async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io::Result<()> {
     // Read the request data
-    let mut request = [0; 1024];
-    let size = stream.read(&mut request).await?;
+    let mut request: Vec<u8> = Vec::new();
+    let _size = stream.read_to_end(&mut request).await?;
 
     // convert to string
-    let request_string = match String::from_utf8(request[..size].to_vec()) {
-        Ok(request_string) => request_string,
-        Err(e) => {
-            println!("error converting request to string: {}", e);
-            return Ok(());
-        }
-    };
+    //let request_string = match String::from_utf8(request[..size].to_vec()) {
+    //    Ok(request_string) => request_string,
+    //    Err(e) => {
+    //        println!("error converting request to string: {}", e);
+    //        return Ok(());
+    //    }
+    //};
 
     // Get HTTP Request struct
-    let request: HTTPRequest = match extract_parts_and_body(request_string.as_str()) {
+    let request: HTTPRequest = match extract_parts_and_body(request) {
         Some(request) => request,
         None => {
             println!("error extracting parts and body from request");
@@ -222,6 +262,29 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
                 }
             }
         },
+        "POST" => {
+            if request.path.starts_with("/files/") {
+                let filename = request.path.split_at(7).1;
+                match request.body {
+                    Some(data) => match fs::write(format!("{}{}", serve_dir, filename), &data) {
+                        Ok(_) => {
+                            stream
+                                .write_all("HTTP/1.1 201 Created\r\n\r\n".as_bytes())
+                                .await?;
+                        }
+                        Err(_) => {
+                            stream.write_all(RESPONSE_404.as_bytes()).await?;
+                        }
+                    },
+                    None => {
+                        stream.write_all(RESPONSE_404.as_bytes()).await?;
+                    }
+                }
+            } else {
+                // Response 404 Not Found
+                stream.write_all(RESPONSE_404.as_bytes()).await?;
+            }
+        }
         _ => {}
     }
 
