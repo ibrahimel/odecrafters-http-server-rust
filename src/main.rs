@@ -219,99 +219,133 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
 }
 
 async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io::Result<()> {
-    // Read the request data
-    //let mut request: Vec<u8> = Vec::new();
-    let mut request: [u8; 16384] = [0; 16384];
-    let size = stream.read(&mut request).await?;
-    let actual_size = size.min(request.len());
+    loop {
+        // Read the request data
+        //let mut request: Vec<u8> = Vec::new();
+        let mut request: [u8; 16384] = [0; 16384];
+        let size = stream.read(&mut request).await?;
+        let actual_size = size.min(request.len());
 
-    // Get HTTP Request struct
-    let request: HTTPRequest = match extract_parts_and_body(Vec::from(&request[..actual_size])) {
-        Some(request) => request,
-        None => {
-            tracing::error!("error extracting parts and body from request");
-            return Ok(());
-        }
-    };
-
-    // Handle the request based on the path and verb
-    match request.verb.as_str() {
-        "GET" => match request.path.as_str() {
-            "/" => {
-                stream.write_all(RESPONSE_200.as_bytes()).await?;
+        // Get HTTP Request struct
+        let request: HTTPRequest = match extract_parts_and_body(Vec::from(&request[..actual_size]))
+        {
+            Some(request) => request,
+            None => {
+                tracing::error!("error extracting parts and body from request");
+                return Ok(());
             }
-            "/user-agent" => {
-                // Extract user agent
-                let user_agent: String = match request.user_agent {
-                    Some(user_agent) => user_agent,
-                    None => "Unknown".to_string(),
-                };
-                // Respond 200 OK with user_agent
-                let response = format!(
+        };
+
+        // Handle the request based on the path and verb
+        match request.verb.as_str() {
+            "GET" => match request.path.as_str() {
+                "/" => {
+                    stream.write_all(RESPONSE_200.as_bytes()).await?;
+                }
+                "/user-agent" => {
+                    // Extract user agent
+                    let user_agent: String = match request.user_agent {
+                        Some(user_agent) => user_agent,
+                        None => "Unknown".to_string(),
+                    };
+                    // Respond 200 OK with user_agent
+                    let response = format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
                     user_agent.len(),
                     user_agent
                 );
-                stream.write_all(response.as_bytes()).await?;
-            }
-            other => {
-                if other.starts_with("/echo/") {
-                    let message = other.split_at(6).1;
-                    match request.accept_encoding {
-                        Some(encoding_header) => {
-                            let mut encodings: Vec<&str> = Vec::new();
-                            let encodings_vec: Vec<&str> =
-                                encoding_header.as_str().split(", ").collect();
-                            if encodings_vec.len() == 1 && encodings_vec[0].len() == 0 {
-                                encodings.push(encoding_header.as_str());
-                            } else {
-                                encodings.extend(encodings_vec);
-                            }
-                            for encoding in encodings {
-                                match encoding {
-                                    "gzip" => {
-                                        let mut encoder =
-                                            GzEncoder::new(Vec::new(), Compression::default());
-                                        encoder.write_all(message.as_bytes())?;
-                                        let compressed_message = encoder.finish()?;
-                                        let response = format!(
+                    stream.write_all(response.as_bytes()).await?;
+                }
+                other => {
+                    if other.starts_with("/echo/") {
+                        let message = other.split_at(6).1;
+                        match request.accept_encoding {
+                            Some(encoding_header) => {
+                                let mut encodings: Vec<&str> = Vec::new();
+                                let encodings_vec: Vec<&str> =
+                                    encoding_header.as_str().split(", ").collect();
+                                if encodings_vec.len() == 1 && encodings_vec[0].len() == 0 {
+                                    encodings.push(encoding_header.as_str());
+                                } else {
+                                    encodings.extend(encodings_vec);
+                                }
+                                for encoding in encodings {
+                                    match encoding {
+                                        "gzip" => {
+                                            let mut encoder =
+                                                GzEncoder::new(Vec::new(), Compression::default());
+                                            encoder.write_all(message.as_bytes())?;
+                                            let compressed_message = encoder.finish()?;
+                                            let response = format!(
                                     "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nContent-Encoding: gzip\r\n\r\n",
                                     compressed_message.len()
                                 );
-                                        stream.write_all(response.as_bytes()).await?;
-                                        stream.write_all(&compressed_message).await?;
+                                            stream.write_all(response.as_bytes()).await?;
+                                            stream.write_all(&compressed_message).await?;
+                                        }
+                                        _ => {}
                                     }
-                                    _ => {}
                                 }
+                                let response = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                                message.len(),
+                                message
+                            );
+                                stream.write_all(response.as_bytes()).await?;
                             }
-                            let response = format!(
+                            None => {
+                                let response = format!(
                                 "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
                                 message.len(),
                                 message
                             );
-                            stream.write_all(response.as_bytes()).await?;
+                                stream.write_all(response.as_bytes()).await?;
+                            }
                         }
-                        None => {
-                            let response = format!(
-                                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
-                                message.len(),
-                                message
-                            );
-                            stream.write_all(response.as_bytes()).await?;
-                        }
-                    }
-                } else if other.starts_with("/files/") {
-                    let file = other.split_at(7).1;
-                    match fs::read(format!("{}/{}", serve_dir, file)) {
-                        Ok(data) => {
-                            let response = format!(
+                    } else if other.starts_with("/files/") {
+                        let file = other.split_at(7).1;
+                        match fs::read(format!("{}/{}", serve_dir, file)) {
+                            Ok(data) => {
+                                let response = format!(
                                 "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n",
                                 data.len()
                             );
-                            stream.write_all(response.as_bytes()).await?;
-                            stream.write_all(&data).await?;
+                                stream.write_all(response.as_bytes()).await?;
+                                stream.write_all(&data).await?;
+                            }
+                            Err(_) => {
+                                stream.write_all(RESPONSE_404.as_bytes()).await?;
+                            }
                         }
-                        Err(_) => {
+                    } else {
+                        // Response 404 Not Found
+                        stream.write_all(RESPONSE_404.as_bytes()).await?;
+                    }
+                }
+            },
+            "POST" => {
+                if request.path.starts_with("/files/") {
+                    let filename = request.path.split_at(7).1;
+                    let path_value = format!("{}{}", serve_dir, filename);
+                    let path = std::path::Path::new(&path_value);
+                    if let Some(parent) = path.parent() {
+                        if !parent.exists() {
+                            std::fs::create_dir_all(parent)?;
+                        }
+                    }
+                    match request.body {
+                        Some(data) => match fs::write(path, &data) {
+                            Ok(_) => {
+                                stream
+                                    .write_all("HTTP/1.1 201 Created\r\n\r\n".as_bytes())
+                                    .await?;
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to save file: {:?}", e);
+                                stream.write_all(RESPONSE_404.as_bytes()).await?;
+                            }
+                        },
+                        None => {
                             stream.write_all(RESPONSE_404.as_bytes()).await?;
                         }
                     }
@@ -320,44 +354,13 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
                     stream.write_all(RESPONSE_404.as_bytes()).await?;
                 }
             }
-        },
-        "POST" => {
-            if request.path.starts_with("/files/") {
-                let filename = request.path.split_at(7).1;
-                let path_value = format!("{}{}", serve_dir, filename);
-                let path = std::path::Path::new(&path_value);
-                if let Some(parent) = path.parent() {
-                    if !parent.exists() {
-                        std::fs::create_dir_all(parent)?;
-                    }
-                }
-                match request.body {
-                    Some(data) => match fs::write(path, &data) {
-                        Ok(_) => {
-                            stream
-                                .write_all("HTTP/1.1 201 Created\r\n\r\n".as_bytes())
-                                .await?;
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to save file: {:?}", e);
-                            stream.write_all(RESPONSE_404.as_bytes()).await?;
-                        }
-                    },
-                    None => {
-                        stream.write_all(RESPONSE_404.as_bytes()).await?;
-                    }
-                }
-            } else {
-                // Response 404 Not Found
-                stream.write_all(RESPONSE_404.as_bytes()).await?;
+            _ => {
+                tracing::error!("Unknown request method");
             }
         }
-        _ => {
-            tracing::error!("Unknown request method");
-        }
-    }
 
-    Ok(())
+        //Ok(())
+    }
 }
 
 #[tokio::main]
