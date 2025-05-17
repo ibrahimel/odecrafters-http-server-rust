@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 //use regex::Regex;
 use clap::Parser;
 use std::sync::Arc;
@@ -49,26 +50,18 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
     {
         Some(index) => index + 3,
         None => {
-            println!("No CRLF found");
+            tracing::error!("No CRLF found");
             return None;
         }
     };
-    println!(
-        "CRLF found at: {} and size is {}",
-        crlf_index,
-        request.len()
-    );
     let body: Option<Vec<u8>>;
     let parts_raw: Vec<u8> = request.drain(..crlf_index - 3).collect();
     let _crlf_raw: Vec<u8> = request.drain(..4).collect();
     let body_raw = request;
     let parts = match String::from_utf8(parts_raw) {
-        Ok(parts_str) => {
-            println!("Parts: {:?}", parts_str);
-            parts_str
-        }
+        Ok(parts_str) => parts_str,
         Err(_) => {
-            println!("Invalid parts");
+            tracing::error!("Invalid parts");
             return None;
         }
     };
@@ -77,7 +70,6 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
         body = None;
     } else {
         body = Some(body_raw.clone());
-        println!("Body: {:?}", String::from_utf8_lossy(&body_raw));
     }
 
     // // Split different elements
@@ -168,14 +160,13 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
     if !VERBS.contains(&verb.as_str()) {
         return None;
     }
-    println!("We are at the body and length checks");
 
     // Checks on body and content length
     match content_length {
         Some(length) => match body.clone() {
             Some(body_value) => {
                 if body_value.len() != length as usize {
-                    println!(
+                    tracing::error!(
                         "Body length: {} does not match Content-Length header: {}",
                         body_value.len(),
                         length
@@ -185,7 +176,7 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
             }
             None => {
                 if length != 0 {
-                    println!("No body found but found content length: {}", length);
+                    tracing::error!("No body found but found content length: {}", length);
                     return None;
                 }
             }
@@ -193,7 +184,7 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
         None => match body.clone() {
             Some(body_value) => {
                 if body_value.len() != 0 {
-                    println!(
+                    tracing::error!(
                         "Body found of length {} but no Content-Length header",
                         body_value.len()
                     );
@@ -214,33 +205,22 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
         accept,
         body,
     };
-    println!(
-        "Request parsed successfully, returning HTTPRequest struct: {:?}",
-        req.clone()
-    );
 
     Some(req)
 }
 
 async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io::Result<()> {
     // Read the request data
-    let mut request: Vec<u8> = Vec::new();
-    let _size = stream.read_to_end(&mut request).await?;
-
-    // convert to string
-    //let request_string = match String::from_utf8(request[..size].to_vec()) {
-    //    Ok(request_string) => request_string,
-    //    Err(e) => {
-    //        println!("error converting request to string: {}", e);
-    //        return Ok(());
-    //    }
-    //};
+    //let mut request: Vec<u8> = Vec::new();
+    let mut request: [u8; 16384] = [0; 16384];
+    let size = stream.read(&mut request).await?;
+    let actual_size = size.min(request.len());
 
     // Get HTTP Request struct
-    let request: HTTPRequest = match extract_parts_and_body(request) {
+    let request: HTTPRequest = match extract_parts_and_body(Vec::from(&request[..actual_size])) {
         Some(request) => request,
         None => {
-            println!("error extracting parts and body from request");
+            tracing::error!("error extracting parts and body from request");
             return Ok(());
         }
     };
@@ -298,24 +278,25 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
         "POST" => {
             if request.path.starts_with("/files/") {
                 let filename = request.path.split_at(7).1;
-                let path = format!("{}{}", serve_dir, filename);
-                println!("Saving file {}", path);
-                match request.body {
-                    Some(data) => {
-                        println!("We have data !");
-                        match fs::write(path, &data) {
-                            Ok(_) => {
-                                println!("File saved successfully");
-                                stream
-                                    .write_all("HTTP/1.1 201 Created\r\n\r\n".as_bytes())
-                                    .await?;
-                            }
-                            Err(e) => {
-                                println!("Failed to save file: {:?}", e);
-                                stream.write_all(RESPONSE_404.as_bytes()).await?;
-                            }
-                        }
+                let path_value = format!("{}{}", serve_dir, filename);
+                let path = std::path::Path::new(&path_value);
+                if let Some(parent) = path.parent() {
+                    if !parent.exists() {
+                        std::fs::create_dir_all(parent)?;
                     }
+                }
+                match request.body {
+                    Some(data) => match fs::write(path, &data) {
+                        Ok(_) => {
+                            stream
+                                .write_all("HTTP/1.1 201 Created\r\n\r\n".as_bytes())
+                                .await?;
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to save file: {:?}", e);
+                            stream.write_all(RESPONSE_404.as_bytes()).await?;
+                        }
+                    },
                     None => {
                         stream.write_all(RESPONSE_404.as_bytes()).await?;
                     }
@@ -326,7 +307,7 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
             }
         }
         _ => {
-            println!("Unknown request method");
+            tracing::error!("Unknown request method");
         }
     }
 
@@ -335,30 +316,33 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    // Initialize tracing
+    tracing_subscriber::fmt::init();
+
     // Parse command-line arguments
     let args = Args::parse();
     let serve_dir = Arc::new(args.directory);
 
     // Bind to the address using Tokio's TcpListener
     let listener = TcpListener::bind("127.0.0.1:4221").await?;
-    println!("Server listening on 127.0.0.1:4221");
+    tracing::info!("Server listening on 127.0.0.1:4221");
 
     // Accept connections and process them concurrently
     loop {
         match listener.accept().await {
             Ok((stream, addr)) => {
-                println!("New connection from: {}", addr);
+                tracing::info!("New connection from: {}", addr);
                 let dir_clone = Arc::clone(&serve_dir);
 
                 // Spawn a new task for each connection
                 tokio::spawn(async move {
                     if let Err(e) = handle_connection(stream, dir_clone).await {
-                        println!("Error handling connection: {}", e);
+                        tracing::error!("Error handling connection: {}", e);
                     }
                 });
             }
             Err(e) => {
-                println!("Error accepting connection: {}", e);
+                tracing::error!("Error accepting connection: {}", e);
             }
         }
     }
