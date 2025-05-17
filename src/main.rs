@@ -42,6 +42,7 @@ struct HTTPRequest {
     content_length: Option<u32>,
     accept: Option<String>,
     accept_encoding: Option<String>,
+    connection: Option<String>,
     body: Option<Vec<u8>>,
 }
 
@@ -111,6 +112,7 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
     let mut content_type: Option<String> = None;
     let mut accept: Option<String> = None;
     let mut accept_encoding: Option<String> = None;
+    let mut connection: Option<String> = None;
 
     // Raw headers
     let headers_raw = parts_elements[1];
@@ -155,6 +157,9 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
                 }
                 "Accept-Encoding" => {
                     accept_encoding = Some(parts[1].to_string());
+                }
+                "Connection" => {
+                    connection = Some(parts[1].to_string());
                 }
                 _ => {}
             }
@@ -212,6 +217,7 @@ fn extract_parts_and_body(mut request: Vec<u8>) -> Option<HTTPRequest> {
         content_length,
         accept,
         accept_encoding,
+        connection,
         body,
     };
 
@@ -235,6 +241,17 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
                 return Ok(());
             }
         };
+        let mut close = false;
+        let mut close_header: &str = "";
+        match request.connection {
+            Some(conn) => {
+                if conn == "close" {
+                    close = true;
+                    close_header = "Connection: close\r\n";
+                }
+            }
+            None => {}
+        }
 
         // Handle the request based on the path and verb
         match request.verb.as_str() {
@@ -250,8 +267,9 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
                     };
                     // Respond 200 OK with user_agent
                     let response = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n{}\r\n{}",
                     user_agent.len(),
+                    close_header,
                     user_agent
                 );
                     stream.write_all(response.as_bytes()).await?;
@@ -277,8 +295,9 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
                                             encoder.write_all(message.as_bytes())?;
                                             let compressed_message = encoder.finish()?;
                                             let response = format!(
-                                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nContent-Encoding: gzip\r\n\r\n",
-                                    compressed_message.len()
+                                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nContent-Encoding: gzip\r\n{}\r\n",
+                                    compressed_message.len(),
+                                    close_header
                                 );
                                             stream.write_all(response.as_bytes()).await?;
                                             stream.write_all(&compressed_message).await?;
@@ -287,16 +306,18 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
                                     }
                                 }
                                 let response = format!(
-                                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n{}\r\n{}",
                                 message.len(),
+                                close_header,
                                 message
                             );
                                 stream.write_all(response.as_bytes()).await?;
                             }
                             None => {
                                 let response = format!(
-                                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n{}\r\n{}",
                                 message.len(),
+                                close_header,
                                 message
                             );
                                 stream.write_all(response.as_bytes()).await?;
@@ -307,8 +328,9 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
                         match fs::read(format!("{}/{}", serve_dir, file)) {
                             Ok(data) => {
                                 let response = format!(
-                                "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n",
-                                data.len()
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n{}\r\n",
+                                data.len(),
+                                close_header
                             );
                                 stream.write_all(response.as_bytes()).await?;
                                 stream.write_all(&data).await?;
@@ -337,7 +359,10 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
                         Some(data) => match fs::write(path, &data) {
                             Ok(_) => {
                                 stream
-                                    .write_all("HTTP/1.1 201 Created\r\n\r\n".as_bytes())
+                                    .write_all(
+                                        format!("HTTP/1.1 201 Created\r\n{}\r\n", close_header)
+                                            .as_bytes(),
+                                    )
                                     .await?;
                             }
                             Err(e) => {
@@ -358,9 +383,11 @@ async fn handle_connection(mut stream: TcpStream, serve_dir: Arc<String>) -> io:
                 tracing::error!("Unknown request method");
             }
         }
-
-        //Ok(())
+        if close {
+            break;
+        }
     }
+    Ok(())
 }
 
 #[tokio::main]
